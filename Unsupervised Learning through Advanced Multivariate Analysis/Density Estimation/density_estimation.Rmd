@@ -1,0 +1,393 @@
+---
+title: "| Assigntment 1 - Densitiy Estimation\n| Advanced Multivariate Analysis (AMA)\n|
+  Facultat d'Informàtica de Barcelona (FIB)\n| Universitat Politècnica de Catalunya
+  (UPC) - BarcelonaTech\n"
+author: "Joan Oliveras Torra, Odysseas Kyparissis, Louis Tichelman"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: no
+    df_print: paged
+  pdf_document:
+    includes:
+      in_header: header.tex
+    toc: no
+    number_sections: yes
+    fig_width: 6
+    fig_height: 4
+    fig_caption: yes
+geometry: margin=3cm
+fontsize: 12pt
+line-height: 1.5
+subtitle: "Bandwidht choice by leave-one-out maximum likelihood"
+classoption: a4paper
+editor_options:
+  chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+- \fancyhf{}
+- \renewcommand{\headrulewidth}{0.5pt}
+- \renewcommand{\footrulewidth}{0.5pt}
+- \fancyfoot[R]{\thepage}
+- \AtBeginDocument{\addtocontents{toc}{\protect\thispagestyle{fancy}}}
+---
+
+\newpage
+
+```{=latex}
+\setcounter{tocdepth}{5}
+\tableofcontents
+```
+```{=tex}
+\newpage
+\pagenumbering{arabic}
+```
+```{r setup }
+knitr::opts_chunk$set(echo = TRUE)
+
+# Clear plots from the R plots view:
+if(!is.null(dev.list())) dev.off()
+
+# Clean workspace - No variables at the current workspace
+rm(list=ls())
+
+# Installing libraries
+install.packages("rstudioapi", repos = "https://cran.rstudio.com/")
+install.packages("ggplot2", repos = "https://cran.rstudio.com/")
+
+
+# Setting working directory
+# script_directory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+# setwd(script_directory)
+
+library(ggplot2)
+```
+
+\newpage
+
+# Histogram
+
+## Exercise 1
+
+A similar relationship to that of the `leave-one-out kernel density estimator,` $\hat{f}_{h, (-i)}(x_i)$, and the `kernel density estimator using all the observations`, $\hat{f}_{h}(x_i)$, when *both are evaluated at one of the observed data*, is holding between the `histogram estimator of the density function`,$\hat{f}_{hist}(x_i)$, and its `leave-one-out` version, $\hat{f}_{hist, (-i)}(x_i)$, when again *both are evaluated at a single observed point*. The relationship is presented here:
+
+```{=tex}
+\begin{align*}
+  \hat{f}_{hist, (-i)}(x_i)&=\frac{1}{n-1}\sum_{k\neq i}\frac{1}{b}I_{B_{j(x_i)}}(x_k) \\ &= \frac{1}{(n-1)b}\Big(\big(\sum_{k=1 }^n I_{B_{j(x_i)}}(x_k)\big) -1\Big)=\frac{n}{n-1}\Big(\hat{f}_{hist}(x_i)-\frac{1}{nb}\Big).
+\end{align*}
+```
+## Exercise 2
+
+After reading the *`CDrate dataset`*, we call `x` the first column, and the variables *`A`*, *`Z`* and *`nbr`* are defined as mentioned in the statement. The histogram of variable *`x`* is presented in the following figure:
+
+```{r CDrate }
+cdrate.df <-read.table("cdrate.dat")
+x <- cdrate.df[,1]
+A<- min(x)-.05*diff(range(x))
+Z<- max(x)+.05*diff(range(x))
+nbr<-7
+```
+
+```{r histogramX, fig.align = 'center'}
+hx<- hist(x,breaks=seq(A,Z,length=nbr+1),freq=F)
+```
+
+With the usage of the function *`stepfun`* the above histogram is being converted into a function *`hx_f`* that can be evaluated at any point of $\mathbb{R}$, or at a vector of real numbers. By using this function, the histogram generated above is being evaluated at the vector of observed data *`x`*. Moreover, the histogram accompanied with all the points ( $x_i, \hat{f}_{hist}(x_i)$) for $i=1,...,n$ are included in the following figure.
+
+```{r stepfun,  , fig.align = 'center'}
+hx_f<-stepfun(hx$breaks,c(0,hx$density,0))  
+```
+
+```{r xhx_f(x), fig.align = 'center'}
+hist(x,breaks=seq(A,Z,length=nbr+1),freq=F)
+points(x,hx_f(x), pch = 16) 
+legend(x="topleft", legend=c("Histogram estimator at observations"),
+       col=c("black"), cex=0.8,
+       text.font=4, bg='lightblue', pch = c(16, 16))
+```
+
+## Exercise 3
+
+By using the formula of *`exercise 1`* and the histogram estimator of *`exercise 2`*, $\hat{f}_{hist}(x_i)$, the values of $\hat{f}_{hist, (-i)}(x_i)$ are calculated for $i=1,...,n$. Moreover the new points are added to the previous plot. We name the function of $\hat{f}_{hist, (-i)}(x_i)$ (*`hx_f2`*) in the code.
+
+```{r exerc3, out.width="80%", fig.align = 'center'}
+b <- hx$breaks[2]-hx$breaks[1]
+n <- length(x)
+
+hx_f2 <- (n/(n-1))*(hx_f(x)-1/(n*b))
+
+hist(x,breaks=seq(A,Z,length=nbr+1),freq=F)
+points(x,hx_f(x), pch = 16) 
+points(x,hx_f2,col='red', pch = 16)
+legend(x="topleft", legend=c("Histogram estimator", "Leave-one-out estimator"),
+       col=c("black", "red"), cex=0.8,
+       text.font=4, bg='lightblue', pch = c(16, 16))
+```
+
+## Exercise 4
+
+In this part of the report, the *`leave-one-out log-likelihood function`* corresponding to the previous histogram is being calculated with the following formula, and the *`number of breaks`* that has been used is equal to 7.
+
+```{r loollf}
+L7=prod(hx_f2)
+looCV_log_lik=sum(log(hx_f2))
+```
+
+The result of the function is presented here:
+
+```{r loollf_res}
+print("The leave-one-out log-likelihood for nbr=7 is:")
+print(looCV_log_lik)
+```
+
+## Exercise 5
+
+In this exercise we are repeating the same process as before, but this time we are iterating through different values for the *`number of intervals of the histogram`* in the range: $[1,...,15]$. For each of them the *`leave-one-out log-likelihood function`* (*`looCV_log_lik`*) is computed, once the respected histogram has been firstly generated. Additionally, the values of *`looCV_log_lik`* are plotted against the values of *`number of intervals`* and the optimal value of the intervals is selected. For selecting the optimal value, we compare the results of the *`looCV_log_lik`* function, and the one with the maximum values is considered to be the best result. Finally, the histogram of *`x`* is plotted by using the optimal value of *`number of intervals`*. The mentioned plots are presented in the following figures.
+
+```{r logl15 }
+likelihood_k <- c()
+
+for (k in 1:15){
+  hx <- hist(x,breaks=seq(A,Z,length=k+1), plot = FALSE)
+  hx_f <- stepfun(hx$breaks,c(0,hx$density,0)) 
+  #points(x,hx_f(x)) 
+  b=hx$breaks[2]-hx$breaks[1]
+  n=length(x)
+
+  hx_f2 <- (n/(n-1))*(hx_f(x)-1/(n*b))
+  hx_f2[hx_f2<0] <- 0
+  #points(x,f0,col='red')
+  looCV_log_lik=sum(log(hx_f2))
+  likelihood_k <- append(likelihood_k,looCV_log_lik)
+}
+
+best_k <- which.max(likelihood_k)
+```
+
+```{r plotnbrloglikelihood, fig.align = 'center'}
+log_likelihood_nbr_df <- data.frame("nbr" = seq(1:15), "looLogLikelihood" = likelihood_k)
+# Create a line plot for log likelihood and nbr
+suppressWarnings({
+  ggplot(log_likelihood_nbr_df, aes(x = nbr, y = looLogLikelihood)) +
+    geom_line(color = "#0072B2", size = 1) +
+    geom_point(color = "#D55E00", size = 2) +
+    labs(
+      title = "Leave-one-out Log Likelihood vs. Number of Intervals",
+      x = "Number of Intervals",
+      y = "Leave One Out Log Likelihood"
+    ) +
+    theme_minimal()
+})
+```
+
+```{r bestnbr, echo =FALSE}
+print(paste("Number of Intervals with highest leave one out log likelihood:", best_k))
+```
+
+Below the histogram for *`number of intervals`* being equal to ***5*** is presented:
+
+```{r, fig.align = 'center'}
+hist(x,breaks=seq(A,Z,length=best_k+1), plot = TRUE)
+```
+
+## Exercise 6
+
+In this exercise we let $b$ to be the *`common width of the bins of a histogram`*. By considering the set mentioned in the assignment's statement, as the possible values of $b$, the `leave-one-out log-likelihood function` is calculated for each one of them. Ultimately the selection of the best value for $b$ that maximizes the `leave-one-out log-likelihood function` is taking place and the corresponding histogram is being plotted.
+
+```{r  }
+likelihood_b <- c()
+
+for (b in seq((Z-A)/15,(Z-A)/1,length=30)){
+  hx <-  hist(x,breaks=seq(A,Z+b,by=b), plot=F)
+  hx_f <- stepfun(hx$breaks,c(0,hx$density,0)) 
+  #points(x,hx_f(x)) 
+  #b=hx$breaks[2]-hx$breaks[1]
+  n=length(x)
+
+  hx_f2 <- (n/(n-1))*(hx_f(x)-1/(n*b))
+  hx_f2[hx_f2<0] <- 0
+  #points(x,f0,col='red')
+  looCV_log_lik=sum(log(hx_f2))
+  likelihood_b <- append(likelihood_b,looCV_log_lik)
+}
+
+best_b <- seq((Z-A)/15,(Z-A)/1,length=30)[which.max(likelihood_b)]
+```
+
+```{r}
+print("Bin width (b) with highest leave one out log likelihood:")
+print(best_b)
+```
+
+```{r, out.width="50%", fig.align = 'center'}
+hx <-  hist(x,breaks=seq(A,Z+best_b,by=best_b), plot=F)
+plot(hx,freq = FALSE)
+```
+
+## Exercise 7
+
+By recycling the functions *`graph.mixt`* and *`sim.mixt`* defined at *`density_estimation.Rmd`* which generate a mixture of two Gaussians, we generate $n = 100$ data points from it. Let $b$ be the *`bin width`* of a histogram estimator of $f(x)$ using the generated data. Below, we are selecting the value of $b$ that maximizes the *`leave-one-out log-likelihood function`* and, finally, plotting once again the corresponding histogram. A comparison between the results obtained below and the results of *`Scott's`* formula is taking place.
+
+```{r }
+# code from density_estimation.Rmd:
+# graph.mixt
+# Input:
+#    k: number mixture components
+#    mu: vector of length k with the mean values of the k normals
+#    sigma: vector of length k with the st.dev. values of the k normals
+#    alpha: vector of length k with the weights of each normal
+#    graphic: logical value indicating if the mixture density must be plotted
+#    ...: Other parameters passed to plot()
+#
+# Output:
+#    L, U: extremes of the interval where the mixture density is plotted
+#    x: points at which the mixture density is evaluated 
+#    fx: value of the mixture density at x
+#
+graph.mixt<-
+function(k=1, mu=seq(-2*(k-1),2*(k-1),length=k), sigma=seq(1,1,length=k), alpha=seq(1/k,1/k,length=k), graphic=TRUE,...)
+{
+   L<-min(mu-3*sigma)
+   U<-max(mu+3*sigma)
+         
+   x<- seq(from=L,to=U,length=200)
+   fx<- 0*x
+   Salpha<-sum(alpha)
+   for(i in 1:k){
+    p<-alpha[i]/Salpha
+#       fx <- fx + p*exp(-.5*((x-mu[i])/sigma[i])^2)/(sqrt(2*pi)*sigma[i])
+    fx <- fx + p*dnorm(x,mu[i],sigma[i])
+   }
+   if (graphic){
+      plot(x,fx,type="l",...)
+   }
+   return(list(L = L, U = U, x = x, fx = fx))
+}
+
+# sim.mixt
+# Input:
+#    n: number of simulated data
+#    k: number mixture components
+#    mu: vector of length k with the mean values of the k normals
+#    sigma: vector of length k with the st.dev. values of the k normals
+#    alpha: vector of length k with the weights of each normal
+#    graphic: logical value indicating if the mixture density and the 
+#              histogram of the simulated data must be plotted
+#    ...: Other parameters passed to plot()
+#
+# Output:
+#    x: simulated data
+#
+# Requires: 
+#    graph.mixt
+sim.mixt <- function(n=1,k=1, 
+         mu=seq(-2*(k-1),2*(k-1),length=k), 
+         sigma=seq(1,1,length=k), 
+         alpha=seq(1/k,1/k,length=k), graphic=FALSE,...)
+{
+   csa<-cumsum(alpha)
+   x<-runif(n)
+      
+   for (i in 1:n){
+      comp<-sum(csa<=x[i])+1
+      x[i]<-rnorm(1,mu[comp],sigma[comp])
+   }
+   if(graphic) {
+      out<-graph.mixt(k, mu, sigma, alpha, gr=FALSE)
+      hist(x,freq = FALSE,
+           ylim=c(0,max(c(max(out$fx),max(hist(x,plot=FALSE)$density)))))
+      lines(out$x,out$fx,lty=1,lwd=2)
+   }   
+   return(x)
+}
+```
+
+```{r }
+#set seed
+set.seed(5) 
+
+# generate data 
+x <- sim.mixt(n=100,k=2, 
+         mu=c(0, 3/2), 
+         sigma=c(1, 1/3), 
+         alpha=c(3/4, 1/4))
+```
+
+```{r}
+# find b (bin width) maximizing the leave-one-out log likelihood
+
+A<- min(x)-.05*diff(range(x))
+Z<- max(x)+.05*diff(range(x))
+
+# we considered the following set as possible values for b
+possible_bs <- seq((Z-A)/20,(Z-A)/1,length=50)
+
+likelihood_b <- c()
+
+for (b in possible_bs){
+  hx <-  hist(x,breaks=seq(A,Z+b,by=b), plot=F)
+  hx_f <- stepfun(hx$breaks,c(0,hx$density,0)) 
+  n=length(x)
+
+  hx_f2 <- (n/(n-1))*(hx_f(x)-1/(n*b))
+  hx_f2[hx_f2<0] <- 0
+  looCV_log_lik=sum(log(hx_f2))
+  likelihood_b <- append(likelihood_b,looCV_log_lik)
+}
+
+best_b <- possible_bs[which.max(likelihood_b)]
+
+print(paste("bin width with highest leave one out log likelihood (of the ones we considered): ", best_b))
+```
+
+Below the histogram with that bandwidth
+
+```{r}
+hist(x,breaks=seq(A,Z+b,by=best_b), plot=T)
+```
+
+Scotts formula proposes the following bin width:
+
+```{r}
+3.49*sd(x)*100^(-1/3)
+```
+
+The values are (in this case) pretty similar.
+
+# Kernel Density Estimator
+
+## Exercise 8
+
+We consider the vector $x$ of data we have generated before from the mixture of two normals. We use the relationship (see exercise sheet) to select the value of $h$ maximizing the leave-one-out log-likelihood function.
+
+```{r}
+
+# we considered the following set as possible values for h
+possible_hs <- seq(0.001,3,length=100)
+
+likelihood_h <- c()
+
+for (h in possible_hs){
+  kx<- density(x, bw= h)
+  kx_f<- approxfun(x=kx$x,y=kx$y, method='linear',rule=2)
+  n=length(x)
+
+  kx_f2 <- (n/(n-1))*(kx_f(x)-dnorm(0)/(n*h))
+  kx_f2[kx_f2<0] <- 0
+  looCV_log_lik=sum(log(kx_f2))
+  likelihood_h <- append(likelihood_h,looCV_log_lik)
+}
+
+best_h <- possible_hs[which.max(likelihood_h)]
+
+print(paste("bandwidth with highest leave one out log likelihood (of the ones we considered): ", best_h))
+
+```
+
+Below we plot the corresponding kernel density estimator.
+
+```{r}
+plot(density(x, bw=best_h))
+```

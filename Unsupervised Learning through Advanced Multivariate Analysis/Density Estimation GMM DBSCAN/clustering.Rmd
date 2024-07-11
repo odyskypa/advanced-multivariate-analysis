@@ -1,0 +1,335 @@
+---
+title: "Assigntment 2 - Density estimation. GMM. DBSCAN\n Advanced Multivariate Analysis
+  (AMA)"
+author: "Joan Oliveras Torra, Odysseas Kyparissis, Louis Tichelman"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# Clear plots
+if(!is.null(dev.list())) dev.off()
+
+# Clean workspace
+rm(list=ls())
+library(cluster)
+```
+
+## Question 1
+
+```{r}
+load("BikeDay.Rdata")
+X <- as.matrix(day[day$yr==1,c(10,14)])
+```
+
+We start by loading all the data and defining the GMM with the number of clusters $k$ ranging from 2 to 6. We find that best GMM model is the one with $k=3$ clusters. As we can easily see in the BIC graphic, it is the one with the highest BIC. From the summary of the Model-based clustering, based on parameterized finite Gaussian mixture models, we can see that the varying volume, shape, and orientation for different components in the mixture has been tried. Also in the summary table one can see the mean values and the variance of each of the three clusters, together with their mixing probabilities. Finally, the summary provides also information about the log-likelihood estimation, the degrees of freedom ($df$) and the $BIC$ measure.
+
+```{r}
+library(mclust)
+
+GMM <- mclust::Mclust(X,G=2:6, modelNames = "VVV")
+summary(GMM,parameters=TRUE)
+```
+
+The results of the Model-based clustering, based on parameterized finite Gaussian mixture models, can also be investigated in the following 4 plots. To be more precise, the first figure (*Classification for GMM with k=3)* is producing a scatter plot, which contains the data points colored on based on the cluster they belong, together with the respective elipsoid of the Gaussian distribution that describe each cluster. The second figure provides information about the uncertainty of the points being assigned to each specific cluster. It can be seen that points at the borders of different classes, appear with a bigger size, indicating that they are characterized by bigger uncertainty, as for their assignments, compared to points that exist far away from the borders. In the third consequent figure, one can see the BIC values of the different clustering attempts with the usage of different $k$ values. The highest BIC value is achieved for $k=3$ as mentioned before, and for that reason, this is the $best$ number for the proposed number of clusters. Finally, the last plot depicts the density curves of the Gaussian models, together with their interactions. It can be seen that one group is isolated, using a Gaussian distribution on its own (part of the mixture), while the other two groups are interacting at the borders. The different circles present the probabilities of the density of each distribution.
+
+```{r}
+plot(GMM, what="classification")
+title(main="Classification for GMM with k=3")
+plot(GMM, what="uncertainty")
+title(main="Uncertainty for GMM with k=3")
+plot(GMM, what="BIC")
+title(main="BIC values for GMM with range k=2:6")
+plot(GMM, what="density")
+title(main="Density for GMM with k=3")
+```
+
+## Question 2
+
+Next, using the *`sm`* library, we proceed to plot and compare the density of the GMM model with $k=3$and the kernel estimator using the bandwidth proportional to the standard deviations, as defined in the statement. In red, we can see the added kernel density estimator with *`a=0,25`* and *`h=a⋅(StdDev(temp),StdDev(casual))`*.
+
+```{r}
+library(sm)
+plot(GMM, what="density")
+title(main="Comparison Density for GMM and Kernel estimator")
+sm.density(X, h=0.25* c(sd(X[,1]), sd(X[,2])), display = "slice", add = T, col = 2)
+```
+
+The result of the kernel estimator using the bandwidth proportional to the standard deviations is quite similar to the one generated from the Model-based clustering, based on parameterized finite Gaussian mixture models, however some differentiation is present. To be more precise, it can be seen that the estimation of the kernel density estimator is not including in the result the points of the third cluster (*green),* although they are beingrecognized by the Gaussian Mixtures.
+
+## Question 3
+
+Next, for each of the *`3 clusters`* defined in Question 1, we proceed to individually estimate non-parametrically the density, by using library *`sm`*, with a similar approach to this one of Question 2, using the bandwidths proportional to standard deviations in both directions. With the only difference being that we will define *`a=0.4`* and we will plot the density curve that covers 75% of the points in each cluster.
+
+```{r}
+cluster1 <- X[GMM$classification ==1, ]
+cluster2 <- X[GMM$classification ==2, ]
+cluster3 <- X[GMM$classification ==3, ]
+
+sm.density(cluster1, h=0.4* c(sd(cluster1[,1]), sd(cluster1[,2])), display = "slice", xlim = c(0.1, 0.9), ylim = c(-100, 3400), props = c(75))
+sm.density(cluster2, h=0.4* c(sd(cluster2[,1]), sd(cluster2[,2])), display = "slice", add = T, col = 3, props = c(75))
+sm.density(cluster3, h=0.4* c(sd(cluster3[,1]), sd(cluster3[,2])), display = "slice", add = T, col = 4, props = c(75))
+
+```
+
+The result of this question illustrates that the kernel density estimations of the three clusters, when plotted in a 75% coverage rate of the cluster, are totally separable with each other. This result indicate a that the quality of the clustering result is not so bad.
+
+## Question 4
+
+The objective of this question is to use *`library fpc`* to see if it's possible to merge some of the components found in the previous GMM in order to simplify the model and reduce the number of clusters.
+
+This is done because GMM may end up creating multiple components that could be very similar between them, thus allowing us to merge them together. We will do so so using the function *`mergenormals`* and the *`method="bhat"`*, which applies the `Bhattacharyya` distance to determine how close two components are in the GMM.
+
+```{r}
+library(fpc)
+
+fpc.mn = fpc::mergenormals(X, mclustsummary = GMM, method = "bhat")
+                                   
+plot(X[,1], X[,2], col = factor(fpc.mn$clustering))
+```
+
+With this approach the Mixture components are merged in a hierarchical fashion. The merging criterion is computed for all pairs of current clusters and the two clusters with the highest criterion value are merged. Specifically, the Bhattacharyya upper bound on misclassification probability between two components were used as the criterion. Moreover, as it was expected the first two clusters of the GMM approach (*red and blue*) were merged into one, since they were the ones characterized of several points with high uncertainty during Question 1.
+
+## Question 5
+
+Next, we apply the same steps as for Question 3, with the main difference being that we are applying them on the merged model obtained using *`mergenormals`*, thus, using a different value $k^*$.
+
+We want to show again the kernel estimator density for each individual cluster $k^*$ using the bandwidths proportional to the standard deviations in both dimensions: *`h=a⋅(StdDev(temp),StdDev(casual))`*, *`a=0.4`* and plotting the density curves covering *`75% of the points in its cluster`*.
+
+```{r}
+cluster1 <- X[fpc.mn$clustering ==1, ]
+cluster2 <- X[fpc.mn$clustering ==2, ]
+
+sm.density(cluster1, h=0.4* c(sd(cluster1[,1]), sd(cluster1[,2])), display = "slice", xlim = c(0.1, 0.9), ylim = c(-100, 3400), props = c(75))
+sm.density(cluster2, h=0.4* c(sd(cluster2[,1]), sd(cluster2[,2])), display = "slice", add = T, col = 3, props = c(75))
+```
+
+Compared to the results of Question 3, it can be observed that the bounds of the density distribution of the mixed cluster, follow approximately the outer bounds of the two separate clusters, before being merged.
+
+## Question 6
+
+Finally, we will use *`DBSCAN`*, which will allow us to find clusters and outliers at the same time.
+
+Following the statement, we start by centering and scaling the two variables of the dataset used in this analysis. As we know `DBSCAN` uses the parameter *`epsilon`* to define the radius in which the algorithm will look for nearby data points. Therefore the special need to scale and center the data, as the dataset might be following a more complex shape.
+
+We defined two *`for`* loops to iterate through all the given *`epsilon`* and *`minPts`*, finding the best combination to be *`epsilon`\<-0.5* and *`minPts`\<-15*.
+
+```{r}
+# Scaling X
+Xs <- scale(X)
+
+# Define a range of epsilon and minPts values
+epsilons <- c(0.25, 0.5)
+minPts_values <- c(10, 15, 20)
+
+# Perform DBSCAN clustering and plot the clusters
+results <- list()
+par(mfrow=c(2, 3))  # Create a 2x3 grid of plots
+for (eps in epsilons) {
+  for (minPts in minPts_values) {
+    dbscan_result <- dbscan(Xs, eps = eps, MinPts = minPts)
+    results[[paste0("eps", eps, "_minPts", minPts)]] <- dbscan_result
+    plot(Xs, col = dbscan_result$cluster + 1, pch = 19, main = paste("Eps =", eps, ", MinPts =", minPts))
+  }
+}
+par(mfrow=c(1, 1))  # Reset to a single plot
+```
+
+In here, we can observe how the combination of the parameters of `DBSCAN` highlights several outliers (*black points)*, mostly on the upper cluster, which as we saw through the assignment, it clearly has a lower density of points.
+
+Reducing the chosen *`epsilon`* had a very strong impact into the outliers class, increasing a lot the unassigned points (detected outliers). Similarly, increasing the *`minPts`* had a strong impact into the outliers class as well, as it can be observed in the first row of the generated plot.
+
+In some cases ($(eps=0.25, minPts=15)$ , $(eps=0.25, minPts=20)$), it even created 3 clusters for the lower density group while considering all the rest (included all the upper group) as outliers.
+
+To determine analyticaly the best combination of tuning parameters, we made use of the metric ***Silhouette*** ***score*** to evaluate the quality of the clusters generated by different parameter combinations. The Silhouette score is a measure of how similar an object is to its own cluster (cohesion) compared to other clusters (separation). It is used to assess the quality of clusters in unsupervised learning. The Silhouette score ranges from $-1$ to $1$:
+
+-   A high Silhouette score (close to 1) indicates that the object is well matched to its own cluster and poorly matched to neighboring clusters. This is a sign of a good clustering.
+
+-   A Silhouette score near 0 indicates that the object is on or very close to the decision boundary between two neighboring clusters.
+
+-   A low Silhouette score (close to -1) indicates that the object may have been assigned to the wrong cluster.
+
+```{r}
+
+silhouette_scores <- list()
+
+for (eps in epsilons) {
+ for (minPts in minPts_values) {
+   dbscan_result <- results[[paste0("eps", eps, "_minPts", minPts)]]
+   silhouette_score <- silhouette(dbscan_result$cluster, dist(Xs))
+   silhouette_scores[[paste0("eps", eps, "_minPts", minPts)]] <- mean(silhouette_score[, "sil_width"])
+   #plot(silhouette_score, main = paste0("Silhouette Plot for DBSCAN Clustering - ", 
+   #                                    "eps", eps, "_minPts", minPts))
+ }
+}
+silhouette_scores
+```
+
+From the Silhouette measure analysis, it can be concluded that the highest values of Silhouette are achieved for the clustering tries of: `eps0.5_minPts20` and `eps0.5_minPts15`, although both of them have small values of the coefficient (not even reaching 0.5). This result indicates that the cohesion and seperation between the different classes is not so significant. However, in order to select one of the 6 different tries as a final clustering selection, it would be more logical to select the parameters $epsilon=0.5$ and $minPoints=15$ . The reason for this selection, is that based on the way `DBSCAN` operates, for the parameters that achieve the highest Silhouette ($epsilon=0.5$ and $minPoints=20$) the points located on the top of the 2-dimensional space of the data are characterized as outliers, which is not the scenario in this case. On the other hand, the `DBSCAN` result selected, tends to characterize points on the borders between the two clusters as outliers, which can be characterized as a good approximation of the uncertainty of those points. The final selection is presented below.
+
+```{r}
+epsilon <- .5
+minPts <- 15
+
+Xs <- scale(X, center = TRUE, scale = TRUE)
+fpc.ds <- fpc::dbscan(Xs,eps = epsilon, MinPts = minPts, showplot = 0)
+plot(fpc.ds,X, main=paste("fpc::dbscan; epsilon=",epsilon,",minPts=",minPts),
+     xlab="x",ylab="y")
+```
+
+For comparing the obtained results with parameters $epsilon=0.5$ and $minPoints=15$, to the *`mergenormals`* results the cross table is utilized. 
+
+It can be clearly seen that both coincide in classifying the cluster 1 (the group with the highest density of points, *ubicated in the lower part of the scatterplot*). 
+
+The differences arise within the second cluster, while `mergenormals` considered all the upper points to be the 2nd cluster, `DBSCAN` defined some of them as outliers (cluster 0). 
+
+```{r}
+clustering_table<- table(fpc.mn$clustering, fpc.ds$cluster)
+print(clustering_table)
+```
+
+## Question 7
+
+To interpret the clusters found, we visualize them and use additional variables in the data set to describe the clusters.
+
+**Group Data by Cluster and Calculate Cluster-Wise Statistics:** 
+We'll use the "dplyr" package to analyze and describe the clusters in terms of various variables. We'll group the data by cluster and calculate statistics for each cluster.
+
+The **`cluster_summary`** data frame now contains cluster-wise statistics.
+
+-   **`count`**: The number of data points in each cluster.
+
+-   **`avg_temp`**: The average temperature within the cluster.
+
+-   **`avg_atemp`**: The average feeling temperature within the cluster.
+
+-   **`avg_hum`**: The average humidity within the cluster.
+
+-   **`avg_windspeed`**: The average wind speed within the cluster.
+
+-   **`mean_casual`**: The mean number of casual bike rentals in the cluster.
+
+-   **`mean_registered`**: The mean number of registered bike rentals in the cluster.
+
+-   **`mean_count`**: The mean count of rental bikes (casual + registered) in the cluster.
+
+```{r}
+df <-day[day$yr==1,]
+df$cluster <- fpc.ds$cluster
+
+library(dplyr)
+
+# Group the data by the cluster and calculate cluster-wise statistics
+cluster_summary <- df %>%
+  group_by(cluster) %>%
+  summarize(
+    count = n(),                    # Number of data points in each cluster
+    avg_temp = mean(temp),          # Average temperature
+    avg_atemp = mean(atemp),        # Average feeling temperature
+    avg_hum = mean(hum),            # Average humidity
+    avg_windspeed = mean(windspeed),# Average wind speed
+    mean_casual = mean(casual),     # Total casual bike rentals
+    mean_registered = mean(registered), # Total registered bike rentals
+    mean_count = mean(cnt)          # Total count of rental bikes
+  )
+
+# View the cluster summary
+print(cluster_summary)
+```
+
+As we can see, the differences between each cluster's means appear mainly in the mean_casual, avg_temp and avg_atemp (which are extremely correlated). More if we take into account that cluster 0 is the cluster of the outliers, thus we decide to exclude it from this analysis.
+
+In order to further understand what causes the variation from each cluster and how can each cluster be better profiled/explained, we will use the function *`catdes`* from the library *`FactoMineR`*.
+
+This way we take all statistically relevant features that characterize our clusters. We can see the most important features in the top of the lists for every class.
+
+```{r}
+library(FactoMineR)
+df<-df[c(3,5:10,12:15,17)]
+
+
+df$cluster <- factor(df$cluster) 
+
+catdes(df, 12, proba = 0.05, row.w = NULL)
+```
+
+After analyzing the results, we can clearly see that Humidity, and windspeed don't play any important role in explaining our clusters. 
+
+The most important features to identify each cluster are casual and workingday by far. With temp following , and weathersit afterwards. Cnt and atemp have been excluded from the function, as obviously they are highly correlated to casual and temp respectively. 
+
+When analyzing each cluster in detail, we find that cluster 1 has a significantly higher mean of workingday and a significantly lower mean of casual users. 
+
+This show us that individuals classified in cluster 1 tend to be working days in which the casual users don't use as much the service.
+
+Next for cluster 2, we see a significantly higher mean of casual users and a significantly lower mean for workingday. 
+
+Thus, opposed to cluster 1, we can state that individuals classified in  cluster 2 tend to be holidays in which the casual users use the service a lot. 
+
+```{r}
+library(ggplot2)
+# Box Plot of Bike Rentals (Casual and Registered) by Cluster
+ggplot(df, aes(x = factor(cluster), y = casual , fill = factor(cluster))) +
+  geom_boxplot() +
+  labs(title = "Casual bike rentals by Cluster", x = "Cluster", y = "Casual Rentals") +
+  scale_fill_brewer(palette = "Set3")
+
+workingday_counts <- df %>%
+  group_by(cluster, workingday) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# Create a bar plot
+ggplot(workingday_counts, aes(x = factor(cluster), y = count, fill = factor(workingday))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Working Days by Cluster", x = "Cluster", y = "Count") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal()
+
+```
+
+These differences become very clear once we evaluate the respective plots.
+
+On the other hand, if we check the box-plot for temperature vs cluster. We see a difference in the mean of each cluster, however, not as strong as we saw previously with the casual variable.
+
+And finally, when we do the same analysis with Humidity and Windspeed. As expected we see no difference at all between clusters. 
+
+```{r}
+# Scatter Plot of Clusters by Temperature and cluster
+ggplot(df, aes(x = factor(cluster), y = temp, fill = factor(cluster))) +
+  geom_boxplot() +
+  labs(title = "Temperature by Cluster", x = "Cluster", y = "Temperature") +
+  scale_fill_brewer(palette = "Set3")
+
+# Scatter Plot of Clusters by Temperature and cluster
+ggplot(df, aes(x = factor(cluster), y = windspeed, fill = factor(cluster))) +
+  geom_boxplot() +
+  labs(title = "Windspeed by Cluster", x = "Cluster", y = "Windspeed") +
+  scale_fill_brewer(palette = "Set3")
+
+# Scatter Plot of Clusters by Temperature and cluster
+ggplot(df, aes(x = factor(cluster), y = hum, fill = factor(cluster))) +
+  geom_boxplot() +
+  labs(title = "Humidity by Cluster", x = "Cluster", y = "Humidity") +
+  scale_fill_brewer(palette = "Set3")
+
+```
+
+```{r, include=FALSE}
+# 
+# # Scatter Plot of Clusters by Temperature and Windspeed
+# ggplot(df, aes(x = temp, y = windspeed, color = factor(cluster))) +
+#   geom_point() +
+#   labs(title = "Clusters by Temperature and Windspeed", x = "Temperature", y = "Windspeed")
+# 
+# # Scatter Plot of Clusters by Temperature and Windspeed
+# ggplot(df, aes(x = temp, y = hum, color = factor(cluster))) +
+#   geom_point() +
+#   labs(title = "Clusters by Temperature and Humidity", x = "Temperature", y = "Humidity")
+
+```
+

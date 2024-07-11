@@ -1,0 +1,20 @@
+\usepackage{titling}
+\usepackage{fancyhdr}
+
+\pretitle{%
+  \begin{center}  
+  \LARGE
+  \includegraphics[width=6cm,height=10cm]{logo-upc.png}\\[\bigskipamount]
+  %\includegraphics[width=8cm,height=12cm]{logo.png}\\[\bigskipamount]
+}
+\posttitle{\end{center}}
+
+
+\pagestyle{fancy}
+\fancyhf{} % Clear all header and footer fields
+\renewcommand{\headrulewidth}{0.5pt} % Header line
+\fancyfoot[R]{\thepage} % Page number on the bottom right
+\fancyhead[R]{\thetitle} % Display the subtitle in the right corner of the header
+\fancyfoot[L]{\theauthor} % Display the author names in the left corner of the footer
+
+\AtBeginDocument{\addtocontents{toc}{\protect\thispagestyle{fancy}}} % To apply the style to the table of contents

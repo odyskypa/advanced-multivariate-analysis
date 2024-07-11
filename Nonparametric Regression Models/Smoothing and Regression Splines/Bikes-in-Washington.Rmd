@@ -1,0 +1,215 @@
+---
+title: "Smoothing and Regression Splines"
+author: "Joan Oliveras Torra, Odysseas Kyparissis, Louis Tichelman"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+The file `bikes.Washington.Rdata` contains information on the bike-sharing rental service in Washington D.C., USA, corresponding to years `2011` and `2012`. This file contains only one data frame, `bikes`, with `731` rows (one for each day of years 2011 and 2012, that was a leap year) and `9` columns:
+
+```{r}
+load("bikes.Washington.Rdata")
+summary(bikes)
+```
+
+From the summary and a brief inspection of the dataset the following information is obtained:
+
+-   `instant`: Row index, ranging from 1 to 731.
+-   `yr`: Year (0: 2011, 1: 2012).
+-   `dayyr`: Day of the year (1 to 365 for 2011, 1 to 366 for 2012).
+-   `weekday`: Day of the week (0 for Sunday, 1 for Monday, ..., 6 for Saturday).
+-   `workingday`: If the day is neither a weekend nor a holiday, it is 1; otherwise, it is 0.
+-   `temp`: Temperature in Celsius.
+-   `hum`: Humidity in percentage (%).
+-   `windspeed`: Wind speed in miles per hour.
+-   `cnt`: Count of total rental bikes. In this assignment, we consider this variable as continuous.
+
+# Question 1: Cubic regression spline
+
+The model we want to estimate is: ($cnt \sim m(instant)$)
+
+## Model fitting
+
+```{r}
+# Sort dataframe based on the "instant" column
+df <- bikes[order(bikes$instant), ]
+spline_fit <- smooth.spline(df$instant, df$cnt, cv = FALSE)
+spline_fit
+```
+
+## Extraction of results
+
+```{r}
+lambda <- spline_fit$lambda
+df <- spline_fit$df
+num_knots <- spline_fit$fit$nk
+fitted_values <- predict(spline_fit, bikes$instant)$y
+```
+
+## Display of results
+
+### (a), (b), (c)
+
+```{r}
+# Display the results
+cat("a) The chosen penalty parameter λ is:", lambda, "\n")
+cat("b) The corresponding equivalent number of degrees of freedom df is:", df, "\n")
+cat("c) The number of knots used is:", num_knots, "\n")
+```
+
+### (d) Graphic representation of the estimated regression function
+
+The estimated regression function $\hat m(instant)$, together with the scatter plot of the real data is displayed in this section.
+
+
+```{r}
+plot(x = bikes$instant, y = bikes$cnt,
+     main=paste("Number of knots =",num_knots,
+                "; Equiv. no. params.=",round(df,2)), col = "purple", pch = 20)
+abline(v=spline_fit$fit$min+spline_fit$fit$knot*spline_fit$fit$range, col=8, lty=2)
+lines(spline_fit,col="orange",lwd=2)
+# Add legend with adjusted position
+legend("topleft", legend = c("Real Values", "Estimated Regression Function"), col = c("purple", "orange"), pch = c(20, NA), lwd = c(NA, 2), cex = 0.8)
+```
+
+# Question 2: Nonparametric logistic regression using splines with a IRWLS procedure
+
+The following script (`IRWLS_logistic_regression.R`) includes the implementation of `logistic regression` by using a custom `Iteratively Re-Weighted Least Squares (IRWLS)` algorithm.
+
+```{r}
+# Source IRWLS_logistic_regression.R
+source("IRWLS_logistic_regression.R")
+```
+
+The implementation is mainly performed from the function `logistic.IRWLS.splines` where its arguments are the explanatory variable $x$, the $0-1$ response variable $y$, the vector $x.new$ of new values of variable $x$ where we want to predict the probability of $y$ being $1$ given that $x$ is equal to $x.new$, the equivalent number of parameters (or model degrees of
+freedom) $df$, and the logical `plts` indicating if plots are desired or not.
+
+## Creation of variable cnt.5000
+
+```{r}
+bikes$cnt.5000 <- ifelse(bikes$cnt >= 5000, 1, 0)
+```
+
+The following `barplot` provides an insight on the number of days with more or less than $5000$ rentals.
+
+```{r}
+# Plot the counts of each category using a bar plot
+barplot(table(bikes$cnt.5000), main = "Counts of cnt.5000 Categories", xlab = "cnt.5000", ylab = "Count", col = c("purple", "orange"), legend = c("0", "1"))
+```
+
+## (a) Range of temperatures for probability of having more than 5000 rentals in a day is larger than 0.5
+
+```{r}
+# Fit non-parametric binary regression
+# Sort dataframe based on the "temp" column
+df <- bikes[order(bikes$temp), ]
+logistic_spline_fit <- logistic.IRWLS.splines(x = df$temp, y = df$cnt.5000, df = 6, plts=TRUE)
+
+```
+
+```{r}
+# Calculate the estimated probabilities for the given temperatures
+predicted_probabilities <- logistic_spline_fit$fitted.values
+```
+
+
+
+```{r}
+# Find the temperatures where Pr(cnt >= 5000|temp) is larger than 0.5
+temperatures <- df$temp[predicted_probabilities > 0.5]
+```
+
+
+```{r}
+# Display the range of temperatures
+cat("The range of temperatures where Pr(cnt >= 5000|temp) is larger than 0.5 is: [",min(temperatures),",",max(temperatures), "]\n")
+```
+## (b) k-fold log-likelihood cross validation
+
+```{r}
+# Set of possible values for df
+df.v <- seq(3, 15)
+
+# Initialize variables to store cross-validation results
+cv_results <- numeric(length(df.v))
+
+# Perform k-fold log-likelihood cross-validation
+set.seed(789)  # Set seed for reproducibility
+
+# Shuffle the indices
+indices <- sample(1:nrow(bikes))
+
+# Number of folds
+k <- 5
+
+# Size of each fold
+fold_size <- ceiling(nrow(bikes) / k)
+
+# Create list to hold fold indices
+folds <- vector("list", k)
+
+# Split indices into folds
+for (i in 1:k){
+  start <- ((i - 1) * fold_size) + 1
+  end <- min(i * fold_size, nrow(bikes))
+  folds[[i]] <- indices[start:end]
+}
+
+for (j in 1:length(df.v)){
+  df = df.v[j]
+  cv_log_likelihood = 0
+  for (i in 1:k){
+    x = bikes$temp[-folds[[i]]]
+    x.new = bikes$temp[folds[[i]]]
+    y = bikes$cnt.5000[-folds[[i]]]
+    y.new = bikes$cnt.5000[folds[[i]]]
+    model = logistic.IRWLS.splines(x=x, y=y, x.new = x.new, plts = F, df=df)
+    pred = model$predicted.values
+    valid_log_likelihood  = sum(y.new*log(pred) + (1-y.new)*log(1-pred))
+    cv_log_likelihood = cv_log_likelihood + valid_log_likelihood
+  }
+  cv_results[j] = cv_log_likelihood
+}
+
+# Choose the df value that maximizes cross-validated log-likelihood
+optimal_df <- df.v[which.max(cv_results)]
+```
+
+
+```{r}
+# Display the cv_results data
+cv_results
+# Display the optimal df value
+cat("Optimal df:", optimal_df, "\n")
+```
+
+```{r}
+plot(df.v, cv_results, main = "Degrees of freedom (df) vs Average CV log-likelihood", xlab = "df", ylab = "Average CV log-likelihood",  col = "purple", pch = 20)
+abline(v = optimal_df, col = "orange")  # Assuming optimal_df is a vertical line
+```
+
+
+```{r}
+# Sort dataframe based on the "instant" column
+df <- bikes[order(bikes$temp), ]
+# Fit logistic regression model with optimal df
+final_model <- logistic.IRWLS.splines(x = df$temp,
+                                       y = df$cnt.5000,
+                                       df = optimal_df,
+                                       plts=TRUE)
+```
+
+
+```{r}
+plot(x = df$temp, y = df$cnt.5000,
+     main=paste("Degrees of freedom=",round(optimal_df,2)), col = "purple", pch = 20)
+# lines(bikes$temp,final_model$fitted.values>0.5,col="orange",lwd=2)
+lines(df$temp,final_model$predicted.values,col="orange",lwd=2)
+# Add legend with adjusted position
+legend("left", legend = c("Real Values", "Estimated Logistic Function"), col = c("purple", "orange"), pch = c(20, NA), lwd = c(NA, 2), cex = 0.5)
+```
+
